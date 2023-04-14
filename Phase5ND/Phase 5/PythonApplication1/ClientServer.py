@@ -162,7 +162,90 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
     seq_num = 0
     TIMEOUT = 0.03
     total_start_time = time.time()
-    
+    packet_num_sent_tracker = []
+    packet_time_tracker = []
+    window_size = 10
+    timeout_occured = False
+
+    while count < len(output_image):
+        # Adds sequence number to packet and checksum, creating the header.
+        timeout_occured = False
+        packet = output_image[count]
+        count += 1
+        print(f"Packet: {count}\n")
+        check_sum = Create_checksum(packet, seq_num)
+        print(f"Displaying checksums before errors/ack resending.")
+        print(f"Packet {count} check_sum = {check_sum}")
+
+        check_sum = check_sum.to_bytes(2, "big")
+        packet = check_sum + packet
+        packet = seq_num.to_bytes(1, "big") + packet
+
+        # Before we ever go to send anything, we need to do a timeout check to ensure no packet has expired
+        if len(packet_num_sent_tracker) > 0:
+            #go through all of our timer tracking for each packet
+            for index, i in packet_time_tracker:
+                    
+                if time.time() - i < TIMEOUT: #this packet has not timed out, move on to the next packet to check
+                    continue
+
+                #this is the case where one of our packets has timed out, we need to move to this value and readjust everything for resending
+                count = packet_num_sent_tracker[index] - 1
+                print(f"Packet: {count}; Has timed out. Base pointer will now be readjusted and the new window will start at this packet")
+                #since our base pointer is being changed we now need to dump both of our arrays and reset them
+                packet_num_sent_tracker = []
+                packet_time_tracker = []
+                timeout_occured = True
+                break
+
+
+        # Send the packet to the server and store each packet number as it is sent, do not exceed our window limit, and ensure timeout has not occured
+        if len(packet_num_sent_tracker) < window_size and timeout_occured != True:
+            Udt_send_packet(packet)
+            packet_num_sent_tracker.append(count)
+
+            # Start Timer for individual packet and store it
+            #start_time = time.time()
+            packet_time_tracker.append(time.time())
+            print(f"Packet {count} has been sent to the server...")
+
+        # If our tracker is the length of our window size, we do not want to move on to the next packet, we want to just keep polling the server for responses
+        # until we can either dump a packet or have to reset due to now ack back
+        while len(packet_num_sent_tracker) >= window_size and timeout_occured != True:
+
+            # Receive message from server
+            message_from_server, server_address = client_socket.recvfrom(2048)
+            message = message_from_server[:3].decode("utf-8")
+            # if we do not get an ack, we need to check all of our times for the packets that have been sent 
+            while message != "ack" and timeout_occured != True:
+                #go through all of our timer tracking for each packet
+                for index, i in packet_time_tracker:
+                    
+                    if time.time() - i < TIMEOUT: #this packet has not timed out, move on to the next packet to check
+                        continue
+
+                    #this is the case where one of our packets has timed out, we need to move to this value and readjust everything for resending
+                    count = packet_num_sent_tracker[index] - 1
+                    print(f"Packet: {count}; Has timed out. Base pointer will now be readjusted and the new window will start at this packet")
+                    #since our base pointer is being changed we now need to dump both of our arrays and reset them
+                    packet_num_sent_tracker = []
+                    packet_time_tracker = []
+                    timeout_occured = True
+                    break
+
+                message_from_server = ""
+                message_from_server, server_address = client_socket.recvfrom(2048)
+
+            # Below is what if we get an ack back and there is no timeout, if this does occur after we perform the operation we will jump out of our while loop
+            # And send another packet
+            if timeout_occured != True:
+                int_read = message_from_server[3:].decode("utf-8")
+                #remove the time of the ack'd packet in the timer buffer for individual packets
+                packet_time_tracker.remove(packet_num_sent_tracker.index(int_read))
+                #remove the packet from the sent packet buffer since it no longer needs checking
+                packet_num_sent_tracker.remove(int_read)
+        
+'''
     for packet in output_image:
         # Adds sequence number to packet and checksum, creating the header.
         count += 1
@@ -175,17 +258,25 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
         packet = check_sum + packet
         packet = seq_num.to_bytes(1, "big") + packet
 
-        # Send the packet to the server
-        Udt_send_packet(packet)
+        # Send the packet to the server and store each packet number as it is sent, do not exceed our window limit
 
-        # Start Timer
-        start_time = time.time()
+        # If our tracker is the length of our window size, we do not want to move on to the next packet
+        while len(packet_num_sent_tracker) > window_size:
 
+        if len(packet_num_sent_tracker) < window_size:
+            Udt_send_packet(packet)
+            packet_num_sent_tracker.append(count)
+
+            # Start Timer for individual packet and store it
+            #start_time = time.time()
+            packet_time_tracker.append(time.time())
+            print(f"Packet {count} has been sent to the server...")
+        
         # Receive message from server
         message_from_server, server_address = client_socket.recvfrom(2048)
 
         # We now must wait for our server to tell us that it has processed our packet and then we can move on to our next packet
-        while message_from_server != b"ack":
+        while message_from_server[:3] != b"ack":
             if time.time() - start_time > TIMEOUT:
                 print(f"Timeout. Resending packet {count}...")
                 Udt_send_packet(packet)
@@ -193,7 +284,7 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
                 start_time = time.time()
             message_from_server = ""
             message_from_server, server_address = client_socket.recvfrom(2048)
-
+'''
         packet_elapsed_time = time.time() - start_time
         print(f"Packet finished transmitting.")
         print(f"Packet {count} elapsed time = {packet_elapsed_time: .15f} seconds to receive ACK.\n")
