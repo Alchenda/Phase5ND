@@ -54,6 +54,7 @@ while True:
 packet_num = 0
 expected_seg_num = 0
 input_count = 0
+last_succesful_ack = 0
 
 while True: # Continuous loop to read data from the client
     packet, client_address = server_socket.recvfrom(2048)
@@ -110,14 +111,18 @@ while True: # Continuous loop to read data from the client
         # packet and move forward
 
         if(seq_num != expected_seg_num):
-            # Resend ACK
+            # Resend ACK with last succesful ACK
             print("Sequence numbers do not match, ACK must be resent!\n")
-            message = b"nak"
+            message = b"ack"
+            seq_num_str = str(last_succesful_ack)
+            seq_num_byte = seq_num_str.encode()
+            message = message + seq_num_byte
             server_socket.sendto(message, client_address)
         else:
             # We know we can move forward as expected sequence number matches the current sequence number
             # Now we will prepare for the next packet sequence number
             print("Seq match and Checksum match!")
+            last_succesful_ack = expected_seg_num
             expected_seg_num += 1
             '''
             if(expected_seg_num == 0):
@@ -147,7 +152,7 @@ while True: # Continuous loop to read data from the client
 
 # Put together our fixed image
 print("Now process the packets and construct the new image file.\n")
-with open("received_image.jpg", "wb") as file:
+with open("received1_image.jpg", "wb") as file:
     for packet in image_reconstruct:
         file.write(packet)
 
