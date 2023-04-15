@@ -66,9 +66,17 @@ while True: # Continuous loop to read data from the client
         break
     
     # Extract the sequence number and checksum from the packet
+    seq_num = int.from_bytes(packet[0:2], byteorder = 'big')
+    #checksum = int.from_bytes(packet[2:4], byteorder = 'big')
+    #seq_num = packet[0:2]
+    checksum = packet[2:4]
+    data = packet[4:]
+
+    '''
     seq_num = packet[0]
     checksum = packet[1:3]
     data = packet[3:]
+    '''
     
     print("Sent sequence number: ", seq_num)
     print("Expected seq number: ", expected_seg_num)
@@ -104,17 +112,21 @@ while True: # Continuous loop to read data from the client
         if(seq_num != expected_seg_num):
             # Resend ACK
             print("Sequence numbers do not match, ACK must be resent!\n")
-            message = b"ack"
+            message = b"nak"
             server_socket.sendto(message, client_address)
         else:
             # We know we can move forward as expected sequence number matches the current sequence number
             # Now we will prepare for the next packet sequence number
             print("Seq match and Checksum match!")
+            expected_seg_num += 1
+            '''
             if(expected_seg_num == 0):
                 expected_seg_num = 1
             else:
                 expected_seg_num = 0
-
+            '''
+            
+            
             # Add the packet and sequence number to our imageReconstruct list
             input_count += 1
             print("Packets added to image: ", input_count)
@@ -125,8 +137,11 @@ while True: # Continuous loop to read data from the client
             print("Checksum that came with the packet: ", checksum)
             print("Checksums calculated in server: ", calculated_checksum)
             print(f"---------------------------------------------------------------------------\n")
-            # Tell the client that we have processed the packet
+            # Tell the client that we have processed the packet and attach the sequence number with it
             message = b"ack"
+            seq_num_str = str(seq_num)
+            seq_num_byte = seq_num_str.encode()
+            message = message + seq_num_byte
             server_socket.sendto(message, client_address)
 
 
