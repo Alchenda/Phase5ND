@@ -60,7 +60,6 @@ while True: # Continuous loop to read data from the client
     packet, client_address = server_socket.recvfrom(2048)
     packet_num +=1
     print(f"Waiting on packet {packet_num}...")
-    print(option_one_chose)
 
     if packet == b"end":
         print("Transmisison finished")
@@ -156,7 +155,7 @@ while True: # Continuous loop to read data from the client
             print(f"---------------------------------------------------------------------------\n")
             # Tell the client that we have processed the packet and attach the sequence number with it
             message = b"ack"
-            seq_num_str = str(seq_num)
+            seq_num_str = str(expected_seg_num)
             seq_num_byte = seq_num_str.encode()
             message = message + seq_num_byte
             server_socket.sendto(message, client_address)

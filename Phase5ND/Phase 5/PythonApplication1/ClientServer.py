@@ -282,7 +282,6 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
     num_ack = 0
     window_size = 10 #establish the size of the sliding window
     client_socket.settimeout(TIMEOUT)
-    timer_resend = False
     print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
     while True:
         percent_error = input("Please select the percentage of ACK corruption you would like to be implemented(0-60 increments of 5 is the range): ")
@@ -306,7 +305,6 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
         # **** SEND PACKET CONDITION ****
         if(seq_num < base + window_size and seq_num < num_of_packets_to_send):
             #create our packet to be sent out
-            timer_resend = False
             check_sum = Create_checksum(packet, seq_num)
             check_sum = check_sum.to_bytes(2, "big")
             packet = check_sum + packet
@@ -321,7 +319,8 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
 
             #if our base pointer is the same as our seq_num, start the timer as we are at the head of our out going packets
             if(base == seq_num):
-                timer_array[base] = time.time()
+                #timer_array[base] = time.time()
+                timer = time.time()
 
             seq_num += 1
         else:
@@ -344,14 +343,14 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
 
             if(ACK_corruption(percent_error, server_message) and (seq_num < num_of_packets_to_send - window_size) or str_message == "nak"):
                 #we will use a while loop to stall until we timeout
-                while(time.time() < (timer_array[base] + TIMEOUT)):
+                #while(time.time() < (timer_array[base] + TIMEOUT)):
+                while(time.time() < (timer + TIMEOUT)):
                     continue
 
                 print("The ack has been invalidated")
             else: #no corruption in this case, use the packet
                 num_ack = int(str_message[3:]) #get the last number from the ack
                 if(num_ack >= base):
-                    timer_resend = False
                     base = num_ack + 1
                     print(f"New base established: {base}")
                     print("Timer is now being stopped\n")
@@ -359,23 +358,16 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
         except (socket.timeout, OSError):
             print("**** Packet TIMEOUT has occured ****\n")
             print(f"Current Base: {base}")
-            timer_resend = True
             #entire window now needs to be resent
             iteration = base
-            '''
+            
             while iteration < seq_num:
-                timer_array[iteration] = time.time() #restart timer
-                Udt_send_packet(out_going_packets[iteration-1]) #resend the packet
+                timer = time.time()
+                #timer_array[iteration] = time.time() #restart timer
+                Udt_send_packet(out_going_packets[iteration]) #resend the packet
                 print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
                 iteration += 1
             print("\n")
-            '''
-
-        if(timer_resend and iteration < seq_num):
-            timer_array[iteration] = time.time() #restart timer
-            Udt_send_packet(out_going_packets[iteration]) #resend the packet
-            print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
-            iteration += 1
 
         # **** END SEND PACKET CONDITION ****
 
