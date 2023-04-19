@@ -95,23 +95,24 @@ while True: # Continuous loop to read data from the client
 
     # Check the checksum with our incoming packet, if there is a mismatch we need to call for the packet to be resent
     # We do not proceed forward until a succesful packet is recieved
-    if(calculated_checksum!= checksum):
+    if(calculated_checksum != checksum):
         print("Checksum from client: ", checksum)
         print("Checksum produced by the server: ", calculated_checksum)
-        print("The packet recieved has a checksum mismatch, requesting a new packet...")
+        print("The packet recieved has a checksum mismatch")
+        #print("The packet recieved has a checksum mismatch, requesting a new packet...")
+        '''
         #resend last succesful ack
         message = b"ack"
         seq_num_str = str(last_succesful_ack)
         seq_num_byte = seq_num_str.encode()
         message = message + seq_num_byte
         server_socket.sendto(message, client_address)
-        '''
         message = b"nak"
         server_socket.sendto(message, client_address)
-        '''
         print("New packet request sent!")
         print(f"Resending ack: {last_succesful_ack}\n")
         expected_seg_num = last_succesful_ack
+        '''
     else:
         # If our sequence don't match incoming to expected, after passing the checksum then we know
         # the client is asking for the ack back to move forward.
@@ -120,21 +121,17 @@ while True: # Continuous loop to read data from the client
         # packet and move forward
 
         if(seq_num != expected_seg_num):
-            # Resend ACK with last succesful ACK
+            # Resend ACK with failed seq number
             print("Sequence numbers do not match, ACK must be resent!")
             message = b"ack"
-            seq_num_str = str(last_succesful_ack)
+            seq_num_str = str(seq_num)
             seq_num_byte = seq_num_str.encode()
             message = message + seq_num_byte
             server_socket.sendto(message, client_address)
-            print(f"Resending ack: {last_succesful_ack}\n")
-            expected_seg_num = last_succesful_ack
         else:
             # We know we can move forward as expected sequence number matches the current sequence number
             # Now we will prepare for the next packet sequence number
             print("Seq match and Checksum match!")
-            last_succesful_ack = expected_seg_num
-            expected_seg_num += 1
             '''
             if(expected_seg_num == 0):
                 expected_seg_num = 1
@@ -159,6 +156,7 @@ while True: # Continuous loop to read data from the client
             seq_num_byte = seq_num_str.encode()
             message = message + seq_num_byte
             server_socket.sendto(message, client_address)
+            expected_seg_num += 1
 
 
 # Put together our fixed image

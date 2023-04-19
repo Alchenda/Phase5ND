@@ -268,15 +268,13 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
     print("Implementation of ACK corruption\n")
     count = 0
     seq_num = 0
-    TIMEOUT = 0.03
+    TIMEOUT = 0.05
     total_start_time = time.time()
     base = 0 #base packet
     timer = 0
-    start_timer = 0
-    resume_timer = 0
-    pause_timer = 0
+    start_timer = True
     elapsed_time = 0
-    out_going_packets = [None] * len(output_image)
+    out_going_packets = []
     timer_array = [None] * len(output_image)
     num_of_packets_to_send = len(output_image)
     num_ack = 0
@@ -299,11 +297,14 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
            break
 
         #load the data
-        packet = output_image[seq_num]
+        #we need to move through our entire window and send all of our data out
+        while seq_num < base + window_size:
 
-        #create the send condition
-        # **** SEND PACKET CONDITION ****
-        if(seq_num < base + window_size and seq_num < num_of_packets_to_send):
+            if(seq_num >= len(output_image)): # we are are the end of our file we mist avoid indexing issues
+                break
+
+            packet = output_image[seq_num]
+
             #create our packet to be sent out
             check_sum = Create_checksum(packet, seq_num)
             check_sum = check_sum.to_bytes(2, "big")
@@ -311,25 +312,18 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
             packet = seq_num.to_bytes(2, "big") + packet
 
             #store each of these packets in an array
-            out_going_packets[seq_num] = packet
+            out_going_packets.append(packet)
 
             #send out the packet
-            Udt_send_packet(out_going_packets[seq_num])
+            Udt_send_packet(out_going_packets[seq_num % window_size])
             print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
-
-            #if our base pointer is the same as our seq_num, start the timer as we are at the head of our out going packets
-            if(base == seq_num):
-                #timer_array[base] = time.time()
-                timer = time.time()
-
             seq_num += 1
-        else:
-            print("incoming data is being ignored")
 
-        # **** END SEND PACKET CONDITION ****
+        #start our timer if appropriate
+        if start_timer:
+            timer = time.time()
+            start_timer = False
 
-        #create the timeout condition
-        # **** TIMEOUT PACKET CONDITION ****
         try:
             #pull the message from the server, as well as saving the address it has come from
             message_from_server, server_address = client_socket.recvfrom(2048)
@@ -338,97 +332,26 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
             str_message = message_from_server.decode()
             #client_socket.settimeout(None) #allow timer to only be active during receiving
             print(f"message from the server {str_message}")
-
+            iso_str_message = str_message[:3] #isolate the ack or nak
             #check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
-
-            if(ACK_corruption(percent_error, server_message) and (seq_num < num_of_packets_to_send - window_size) or str_message == "nak"):
-                #we will use a while loop to stall until we timeout
-                #while(time.time() < (timer_array[base] + TIMEOUT)):
-                while(time.time() < (timer + TIMEOUT)):
-                    continue
-
-                print("The ack has been invalidated")
-            else: #no corruption in this case, use the packet
+            if(not ACK_corruption(percent_error, message_from_server) and iso_str_message == "ack"):
                 num_ack = int(str_message[3:]) #get the last number from the ack
-                if(num_ack >= base):
+                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if num_ack == base:
+                    timer = time.time()
                     base = num_ack + 1
-                    print(f"New base established: {base}")
-                    print("Timer is now being stopped\n")
-                    timer_resend = False
-        except (socket.timeout, OSError):
-            print("**** Packet TIMEOUT has occured ****\n")
-            print(f"Current Base: {base}")
-            #entire window now needs to be resent
-            iteration = base
+                    del out_going_packets[0]
+
+        except:
             
-            while iteration < seq_num:
+            if time.time() - timer > TIMEOUT:
+                print("**** TIMEOUT ****")
+                iteration = 0
+                while iteration < len(out_going_packets):
+                    Udt_send_packet(out_going_packets[iteration])
+                    iteration += 1
+                
                 timer = time.time()
-                #timer_array[iteration] = time.time() #restart timer
-                Udt_send_packet(out_going_packets[iteration]) #resend the packet
-                print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
-                iteration += 1
-            print("\n")
-
-        # **** END SEND PACKET CONDITION ****
-
-        # ***************************************************************************************************
-
-        # **** TIMEOUT CONDITION ****
-        #create our time out condition. if we timeout, we resend from our base
-        '''
-        display = time.time() - timer
-        print(f" \n displaying our timer: {display} \n")
-        if(time.time() - timer > TIMEOUT):
-            print("A packet has experienced a case of TIMEOUT")
-            iteration = base
-            timer = time.time()
-            while iteration < seq_num:
-                Udt_send_packet(out_going_packets[iteration])
-                print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
-                iteration += 1
-        '''
-        # **** END TIMEOUT CONDITION ****
-
-        # ***************************************************************************************************
-
-        # **** RECEIVE MESSAGE AND CORRUPTION CHECK OF MESSAGE ****
-        #process the individual packets that are coming in we need to recieve a packet and this packet needs to not be curropt either
-        #if these conditions are met, then our base pointer will be updated because the packet has succesfully been acknowledged
-
-        #pull the message from the server, as well as saving the address it has come from
-        '''
-        try:
-            message_from_server, server_address = client_socket.recvfrom(2048)
-            
-
-            #change the message from bytes to a string to make operations easier
-            str_message = message_from_server.decode()
-            print(f"\nmessage from the server {str_message}\n")
-
-            str_ack = str_message[:3] #leave out the last integer
-
-            #if our ACK is corrupted or not an ack then ignore it
-            if(ACK_corruption(percent_error, message_from_server) != True and str_ack == "ack"):
-                base = int(str_message[3:]) + 1
-                if(base == seq_num):
-                    continue
-            else:
-                continue
-
-
-            #corruption and valid message check
-        except socket.timeout:
-            print("******************************socket time out occured****************************************")
-            iteration = base
-            while iteration < seq_num:
-                Udt_send_packet(out_going_packets[iteration])
-                print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
-                iteration += 1
-            #continue
-        '''
-        
-
-        # **** END OF RECEIVE MESSAGE AND CORRUPTION CHECK OF MESSAGE ****
     
     total_end_time = time.time()
     elapsed_time = total_end_time - total_start_time
