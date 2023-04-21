@@ -359,12 +359,6 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
     window_size = 10 #establish the size of the sliding window
     client_socket.settimeout(TIMEOUT)
     print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
-    while True:
-        percent_error = input("Please select the percentage of ACK corruption you would like to be implemented(0-60 increments of 5 is the range): ")
-        if percent_error in ["0", "5", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60"]:
-            break
-        else:
-            print("Invalid value, try again.")
 
     #this will continue looping until our transmission sequence is completely finished
     while True:
@@ -412,7 +406,7 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
             print(f"message from the server {str_message}")
             iso_str_message = str_message[:3] #isolate the ack or nak
             #check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
-            if(not ACK_corruption(percent_error, message_from_server) and iso_str_message == "ack"):
+            if(iso_str_message == "ack"):
                 num_ack = int(str_message[3:]) #get the last number from the ack
                 print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
