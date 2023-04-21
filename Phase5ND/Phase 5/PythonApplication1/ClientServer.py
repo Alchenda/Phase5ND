@@ -60,9 +60,11 @@ def ACK_corruption(percent_error, server_message):
 def ACK_loss(percentage_loss, server_message):
     if random.randint(1, 100) <= int(percentage_loss):
         print("ACK packet lost!")
-        return b""
+        return True
+        #return b""
     else:
-        return server_message
+        return False
+        #return server_message
 
 def data_loss(percentage_loss, packet_to_send):
     # Determine whether to drop the packet
@@ -161,27 +163,36 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
     print("We will now transmit packets with absolutely no loss at any point.\n")
     count = 0
     seq_num = 0
-    TIMEOUT = 0.03
+    TIMEOUT = 0.05
     total_start_time = time.time()
-    window_size = 10 #establish the size of the sliding window
     base = 0 #base packet
     timer = 0
+    start_timer = True
+    elapsed_time = 0
     out_going_packets = []
+    timer_array = [None] * len(output_image)
     num_of_packets_to_send = len(output_image)
+    num_ack = 0
+    window_size = 10 #establish the size of the sliding window
+    client_socket.settimeout(TIMEOUT)
     print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
-    #we will keep looping until we succesfully process all of our packets
+    #this will continue looping until our transmission sequence is completely finished
     while True:
+
         #create our breakout/end transmission condition
         if(seq_num >= len(output_image)):
            print("Client has succesfully processed all of the packets to the server")
            break
 
         #load the data
-        packet = output_image[seq_num]
+        #we need to move through our entire window and send all of our data out
+        while seq_num < base + window_size:
 
-        #create the send condition
-        # **** SEND PACKET CONDITION ****
-        if(seq_num < base + window_size):
+            if(seq_num >= len(output_image)): # we are are the end of our file we mist avoid indexing issues
+                break
+
+            packet = output_image[seq_num]
+
             #create our packet to be sent out
             check_sum = Create_checksum(packet, seq_num)
             check_sum = check_sum.to_bytes(2, "big")
@@ -189,74 +200,44 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
             packet = seq_num.to_bytes(2, "big") + packet
 
             #store each of these packets in an array
-            out_going_packets.append(packet) 
-            #out_going_packets[seq_num] = packet
+            out_going_packets.append(packet)
 
             #send out the packet
-            Udt_send_packet(out_going_packets[seq_num])
+            Udt_send_packet(out_going_packets[seq_num % window_size])
             print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
-
-            #if our base pointer is the same as our seq_num, start the timer as we are at the head of our out going packets
-            if(base == seq_num):
-                timer = time.time()
-
             seq_num += 1
-        else:
-            print("incoming data is being ignored")
 
-        # **** END SEND PACKET CONDITION ****
-
-        # ***************************************************************************************************
-
-        # **** TIMEOUT CONDITION ****
-        #create our time out condition. if we timeout, we resend from our base
-        if(time.time() - timer > TIMEOUT):
-            print("A packet has experienced a case of TIMEOUT")
-            iteration = base
+        #start our timer if appropriate
+        if start_timer:
             timer = time.time()
-            while iteration < seq_num:
-                Udt_send_packet(out_going_packets[iteration])
-                print(f"Sending packet {iteration} from the TIMEOUT CONDITION")
-                iteration += 1
+            start_timer = False
 
-        # **** END OF TIMEOUT CONDITION
+        try:
+            #pull the message from the server, as well as saving the address it has come from
+            message_from_server, server_address = client_socket.recvfrom(2048)
 
-        # ***************************************************************************************************
-
-        # **** RECEIVE MESSAGE AND CORRUPTION CHECK OF MESSAGE ****
-        #process the individual packets that are coming in we need to recieve a packet and this packet needs to not be curropt either
-        #if these conditions are met, then our base pointer will be updated because the packet has succesfully been acknowledged
-
-        #pull the message from the server, as well as saving the address it has come from
-        message_from_server, server_address = client_socket.recvfrom(2048)
-
-        #change the message from bytes to a string to make operations easier
-        str_message = message_from_server.decode()
-        print(f"message from the server {str_message}")
-
-        #corruption and valid message check
-        if(message_from_server != "" ):
-            str_ack = str_message[:3] #leave out the last integer
-
-            if(len(str_message) > 3):
-                num_ack = int(str_message[3:]) #get the last number
-
-            if(str_ack == "ack"): #validate that there is no corruption, and that we received a message.
-                print(f"display num_ack {num_ack}")
-                #passed corruption and validation adjust base and timer as needed
-                base = num_ack + 1
-                print(f"base ponter: {base}")
-                print(f"seq_num: {seq_num}")
-                if(base == seq_num):
-                    #stop our timer
-                    print("Our BASE = SEQ_NUM the timer has been stopped")
-                    timer = -1
-                else:
-                    #start our timer
-                    print("Our BASE and SEQ_NUM are not the same, the timer has been started")
+            #change the message from bytes to a string to make operations easier
+            str_message = message_from_server.decode()
+            print(f"message from the server {str_message}")
+            iso_str_message = str_message[:3] #isolate the ack or nak
+            if(iso_str_message == "ack"):
+                num_ack = int(str_message[3:]) #get the last number from the ack
+                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if num_ack == base:
                     timer = time.time()
-
-        # **** END OF RECEIVE MESSAGE AND CORRUPTION CHECK OF MESSAGE ****
+                    base = num_ack + 1
+                    del out_going_packets[0]
+        #our timeout procedure 
+        except:
+            
+            if time.time() - timer > TIMEOUT:
+                print("**** TIMEOUT ****")
+                iteration = 0
+                while iteration < len(out_going_packets):
+                    Udt_send_packet(out_going_packets[iteration])
+                    iteration += 1
+                
+                timer = time.time()
 
     total_end_time = time.time()
     elapsed_time = total_end_time - total_start_time
@@ -341,7 +322,7 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
                     timer = time.time()
                     base = num_ack + 1
                     del out_going_packets[0]
-
+        #our timeout procedure 
         except:
             
             if time.time() - timer > TIMEOUT:
@@ -361,75 +342,93 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
 # We are just going to send the packet to the server.
 # Server will be responsible for corrupting the data portion of the packet
 elif(option_choice == "Option 3" or option_choice == "option 3"):
-    print("Server-side data corruption\n")
+    print("Implementation of DATA corruption\n")
     count = 0
-    seq_num = -1
-    TIMEOUT = 0.03
+    seq_num = 0
+    TIMEOUT = 0.05
     total_start_time = time.time()
+    base = 0 #base packet
+    timer = 0
+    start_timer = True
+    elapsed_time = 0
+    out_going_packets = []
+    timer_array = [None] * len(output_image)
+    num_of_packets_to_send = len(output_image)
+    num_ack = 0
+    window_size = 10 #establish the size of the sliding window
+    client_socket.settimeout(TIMEOUT)
+    print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
+    while True:
+        percent_error = input("Please select the percentage of ACK corruption you would like to be implemented(0-60 increments of 5 is the range): ")
+        if percent_error in ["0", "5", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60"]:
+            break
+        else:
+            print("Invalid value, try again.")
 
-    for packet in output_image:
-        count += 1
-        print(f"Packet: {count}\n")
-        # Create the header for the packet
-        seq_num = (seq_num +1) % 2
-        check_sum = Create_checksum(packet, seq_num)
-        print(f"Displaying checksums before errors/ack resending.")
-        print(f"Packet {count} check_sum: {check_sum}")
+    #this will continue looping until our transmission sequence is completely finished
+    while True:
 
-        check_sum = check_sum.to_bytes(2, "big")
-        header = seq_num.to_bytes(1, "big") + check_sum
+        #create our breakout/end transmission condition
+        if(seq_num >= len(output_image)):
+           print("Client has succesfully processed all of the packets to the server")
+           break
 
-        # Attach header to packet
-        packet_to_send = header + packet
+        #load the data
+        #we need to move through our entire window and send all of our data out
+        while seq_num < base + window_size:
 
-        # Send the packet to the server
+            if(seq_num >= len(output_image)): # we are are the end of our file we mist avoid indexing issues
+                break
 
-        Udt_send_packet(packet_to_send)
+            packet = output_image[seq_num]
 
-        # Start Timer
-        start_time = time.time()
+            #create our packet to be sent out
+            check_sum = Create_checksum(packet, seq_num)
+            check_sum = check_sum.to_bytes(2, "big")
+            packet = check_sum + packet
+            packet = seq_num.to_bytes(2, "big") + packet
 
-        # Listen for message back from server
-        message_from_server = ""
-        message_from_server, serverAddress = client_socket.recvfrom(2048)
+            #store each of these packets in an array
+            out_going_packets.append(packet)
 
-        while message_from_server != b"ack":
-            if time.time() - start_time > TIMEOUT:
-                print(f"Timeout. Resending packet {count}...")
-                Udt_send_packet(packet)
-                print(f"Packet {count} is resending...")
-                start_time = time.time()
-            else:
-                # Treat NAK and corruption the same
-                print("\nThe previous packet had corruption in the data.")
-                print(f"The packet {count} will be resent")
+            #send out the packet
+            Udt_send_packet(out_going_packets[seq_num % window_size])
+            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            seq_num += 1
 
-                # Create the header for the packet
-                check_sum = Create_checksum(packet, seq_num)
-                print(f"\nResent packet {count} check_sum: {check_sum}")
-                check_sum = check_sum.to_bytes(2, "big")
-                header = seq_num.to_bytes(1, "big") + check_sum
+        #start our timer if appropriate
+        if start_timer:
+            timer = time.time()
+            start_timer = False
 
-                # Attach header to packet
-                packet_to_send = header + packet
-
-                # Resend the packet to the server
-                Udt_send_packet(packet_to_send)
-                #count += 1
-                start_time = time.time()
-
-            # Wait for server response
-            message_from_server = ""
+        try:
+            #pull the message from the server, as well as saving the address it has come from
             message_from_server, server_address = client_socket.recvfrom(2048)
 
-            if(message_from_server == b"ack"):
-                count - 1
-                print(f"Packet {count} sent without corruption in DATA.\n")
-
-        packet_elapsed_time = time.time() - start_time
-        print(f"Packet finished transmitting.")
-        print(f"Packet {count} elapsed time = {packet_elapsed_time: .15f} seconds.")
-        print("-" * 100 + '\n')
+            #change the message from bytes to a string to make operations easier
+            str_message = message_from_server.decode()
+            #client_socket.settimeout(None) #allow timer to only be active during receiving
+            print(f"message from the server {str_message}")
+            iso_str_message = str_message[:3] #isolate the ack or nak
+            #check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
+            if(not ACK_corruption(percent_error, message_from_server) and iso_str_message == "ack"):
+                num_ack = int(str_message[3:]) #get the last number from the ack
+                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if num_ack == base:
+                    timer = time.time()
+                    base = num_ack + 1
+                    del out_going_packets[0]
+        #our timeout procedure 
+        except:
+            
+            if time.time() - timer > TIMEOUT:
+                print("**** TIMEOUT ****")
+                iteration = 0
+                while iteration < len(out_going_packets):
+                    Udt_send_packet(out_going_packets[iteration])
+                    iteration += 1
+                
+                timer = time.time()
 
     total_end_time = time.time()
     elapsed_time = total_end_time - total_start_time
@@ -439,74 +438,93 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
 elif(option_choice == "Option 4" or option_choice == "option 4"):
     print("Implementation of ACK packet loss\n")
     count = 0
-    seq_num = -1
-    TIMEOUT = 0.03
+    seq_num = 0
+    TIMEOUT = 0.05
     total_start_time = time.time()
-    
+    base = 0 #base packet
+    timer = 0
+    start_timer = True
+    elapsed_time = 0
+    out_going_packets = []
+    timer_array = [None] * len(output_image)
+    num_of_packets_to_send = len(output_image)
+    num_ack = 0
+    window_size = 10 #establish the size of the sliding window
+    client_socket.settimeout(TIMEOUT)
+    print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
     while True:
-        percentage_loss = input("Please select the percentage chance of ACK packet loss you would like to be implemented(0-60 increments of 5 is the range): ")
-        if percentage_loss == 0 or 5 or 10 or 15 or 20 or 25 or 30 or 35 or 40 or 45 or 50 or 55 or 60:
+        percent_error = input("Please select the percentage of ACK packet loss you would like to be implemented(0-60 increments of 5 is the range): ")
+        if percent_error in ["0", "5", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55", "60"]:
             break
         else:
-            percentage_loss = input("invalid value, try again")
+            print("Invalid value, try again.")
 
-    for packet in output_image:
-        count += 1
-        print(f"Packet: {count}\n")
-        # Create the header for the packet
-        seq_num = (seq_num +1) % 2
-        check_sum = Create_checksum(packet, seq_num)
-        print(f"Displaying checksums before errors/ack resending.")
-        print(f"Packet {count} Checksum: {check_sum}")
+    #this will continue looping until our transmission sequence is completely finished
+    while True:
 
-        check_sum = check_sum.to_bytes(2, "big")
-        header = seq_num.to_bytes(1, "big") + check_sum
+        #create our breakout/end transmission condition
+        if(seq_num >= len(output_image)):
+           print("Client has succesfully processed all of the packets to the server")
+           break
 
-        # Attach header to packet
-        packet_to_send = header + packet
+        #load the data
+        #we need to move through our entire window and send all of our data out
+        while seq_num < base + window_size:
 
-        # Send the packet to the server
-        Udt_send_packet(packet_to_send)
+            if(seq_num >= len(output_image)): # we are are the end of our file we mist avoid indexing issues
+                break
 
-        # Start timer
-        start_time = time.time()
+            packet = output_image[seq_num]
 
-        # Listen for message back from server
-        message_from_server = ""
-        message_from_server, server_address = client_socket.recvfrom(2048)
+            #create our packet to be sent out
+            check_sum = Create_checksum(packet, seq_num)
+            check_sum = check_sum.to_bytes(2, "big")
+            packet = check_sum + packet
+            packet = seq_num.to_bytes(2, "big") + packet
 
-        message_from_server = ACK_loss(percentage_loss, message_from_server)
+            #store each of these packets in an array
+            out_going_packets.append(packet)
 
-        while message_from_server != b"ack":
-            if time.time() - start_time < TIMEOUT:
-                # Our timer has not timed out yet, we need to wait until our timer has timed out to resend our packet.
-                # In the case of no timeout, we want to continue listening for a message back from the server 
-                continue
-            else:
-                # Our timer has timed out, we need to resend our packet and restart our timer
-                print(f"Timeout. Resending packet {count}...")
-                Udt_send_packet(packet_to_send)
-                print(f"Packet {count} is resending...")
-                print("Timer will now be reset")
-                start_time = time.time()
+            #send out the packet
+            Udt_send_packet(out_going_packets[seq_num % window_size])
+            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            seq_num += 1
 
-                # Packet resent, we listen back for our message from the server
-                print("Waiting for incoming message from the server")
-                message_from_server = ""
-                message_from_server, server_address = client_socket.recvfrom(2048)
+        #start our timer if appropriate
+        if start_timer:
+            timer = time.time()
+            start_timer = False
 
-                # Add our chance of artificial loss again
-                message_from_server = ACK_loss(percentage_loss, message_from_server)
+        try:
+            #pull the message from the server, as well as saving the address it has come from
+            message_from_server, server_address = client_socket.recvfrom(2048)
 
-                if(message_from_server == b"ack"):
+            #message_from_server = ACK_loss(percent_error, server_message)
 
-                    print(f"Packet {count} sent without corruption in DATA and no corruption in ACK\n")
-                    break
-             
-        packet_elapsed_time = time.time() - start_time
-        print(f"Packet finished transmitting.")
-        print(f"Packet {count} elapsed time = {packet_elapsed_time: .15f} seconds.")
-        print("-" * 100 + '\n')
+            #change the message from bytes to a string to make operations easier
+            str_message = message_from_server.decode()
+            #client_socket.settimeout(None) #allow timer to only be active during receiving
+            print(f"message from the server {str_message}")
+            iso_str_message = str_message[:3] #isolate the ack or nak
+            #check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
+            if(not ACK_loss(percent_error, message_from_server) and iso_str_message == "ack"):
+                num_ack = int(str_message[3:]) #get the last number from the ack
+                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if num_ack == base:
+                    timer = time.time()
+                    base = num_ack + 1
+                    del out_going_packets[0]
+        #our timeout procedure 
+        except:
+            
+            if time.time() - timer > TIMEOUT:
+                print("**** TIMEOUT ****")
+                iteration = 0
+                while iteration < len(out_going_packets):
+                    Udt_send_packet(out_going_packets[iteration])
+                    iteration += 1
+                
+                timer = time.time()
             
     total_end_time = time.time()
     elapsed_time = total_end_time - total_start_time
@@ -516,9 +534,20 @@ elif(option_choice == "Option 4" or option_choice == "option 4"):
 elif(option_choice == "Option 5" or option_choice == "option 5"):
     print("Implementation of Data packet loss\n")
     count = 0
-    seq_num = -1
-    TIMEOUT = 0.03
+    seq_num = 0
+    TIMEOUT = 0.05
     total_start_time = time.time()
+    base = 0 #base packet
+    timer = 0
+    start_timer = True
+    elapsed_time = 0
+    out_going_packets = []
+    timer_array = [None] * len(output_image)
+    num_of_packets_to_send = len(output_image)
+    num_ack = 0
+    window_size = 10 #establish the size of the sliding window
+    client_socket.settimeout(TIMEOUT)
+    print(f"This is how many packets need to be sent: {num_of_packets_to_send}")
     
     while True:
         percentage_loss = input("Please select the percentage chance of Data packet loss you would like to be implemented(0-60 increments of 5 is the range): ")
@@ -528,61 +557,74 @@ elif(option_choice == "Option 5" or option_choice == "option 5"):
             percentage_loss = input("invalid value, try again")
     
 
-    for packet in output_image:
-        count += 1
-        print(f"Packet: {count}\n")
-        # Create the header for the packet
-        seq_num = (seq_num +1) % 2
-        check_sum = Create_checksum(packet, seq_num)
-        print(f"Displaying checksums before errors/ack resending.")
-        print(f"Packet {count} Checksum: {check_sum}")
+    #this will continue looping until our transmission sequence is completely finished
+    while True:
 
-        check_sum= check_sum.to_bytes(2, "big")
-        header = seq_num.to_bytes(1, "big") + check_sum
+        #create our breakout/end transmission condition
+        if(seq_num >= len(output_image)):
+           print("Client has succesfully processed all of the packets to the server")
+           break
 
-        # Attach header to packet
-        packet_to_send = header + packet
+        #load the data
+        #we need to move through our entire window and send all of our data out
+        while seq_num < base + window_size:
 
-        # Adding the intentional data loss
-        data_loss_chance = data_loss(percentage_loss, packet_to_send)
+            if(seq_num >= len(output_image)): # we are are the end of our file we mist avoid indexing issues
+                break
 
-        # Send the packet to the server
-        Udt_send_packet(data_loss_chance)
+            packet = output_image[seq_num]
 
-        # Start timer
-        start_time = time.time()
+            #create our packet to be sent out
+            check_sum = Create_checksum(packet, seq_num)
+            check_sum = check_sum.to_bytes(2, "big")
+            packet = check_sum + packet
+            packet = seq_num.to_bytes(2, "big") + packet
 
-        # Listen for message back from server
-        message_from_server = ""
-        message_from_server, server_address = client_socket.recvfrom(2048)
+            #store each of these packets in an array
+            out_going_packets.append(packet)
 
-        while message_from_server != b"ack":
-            if time.time() - start_time < TIMEOUT:
-                # Our timer has not timed out yet, we need to wait until our timer has timed out to resend our packet.
-                # In the case of no timeout, we want to continue listening for a message back from the server.
-                continue
-            else:
-                # Our timer has timed out, we need to resend our packet and restart our timer
-                print(f"Timeout. Resending packet {count}...")
-                data_loss_chance = data_loss(percentage_loss, packet_to_send)
-                Udt_send_packet(data_loss_chance)
-                print(f"Packet {count} is resending...")
-                print("Timer will now be reset")
-                start_time = time.time()
+            #send out the packet
+            data_loss_chance = data_loss(percentage_loss, out_going_packets[seq_num % window_size])
+            Udt_send_packet(data_loss_chance)
+            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            seq_num += 1
 
-                # Packet resent, we listen back for our message from the server
-                print("Waiting for incoming message from the server")
-                message_from_server = ""
-                message_from_server, server_address = client_socket.recvfrom(2048)
+        #start our timer if appropriate
+        if start_timer:
+            timer = time.time()
+            start_timer = False
 
-                if (message_from_server == b"ack"):
-                    print(f"Packet {count} sent without corruption in DATA and no corruption in ACK\n")
-                    break
+        try:
+            #pull the message from the server, as well as saving the address it has come from
+            message_from_server, server_address = client_socket.recvfrom(2048)
 
-        packet_elapsed_time = time.time() - start_time
-        print(f"Packet finished transmitting.")
-        print(f"Packet {count} elapsed time = {packet_elapsed_time: .15f} seconds.")
-        print("-" * 100 + '\n')
+            #message_from_server = ACK_loss(percent_error, server_message)
+
+            #change the message from bytes to a string to make operations easier
+            str_message = message_from_server.decode()
+            #client_socket.settimeout(None) #allow timer to only be active during receiving
+            print(f"message from the server {str_message}")
+            iso_str_message = str_message[:3] #isolate the ack or nak
+            #check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
+            if(iso_str_message == "ack"):
+                num_ack = int(str_message[3:]) #get the last number from the ack
+                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if num_ack == base:
+                    timer = time.time()
+                    base = num_ack + 1
+                    del out_going_packets[0]
+        #our timeout procedure 
+        except:
+            
+            if time.time() - timer > TIMEOUT:
+                print("**** TIMEOUT ****")
+                iteration = 0
+                while iteration < len(out_going_packets):
+                    Udt_send_packet(out_going_packets[iteration])
+                    iteration += 1
+                
+                timer = time.time()
+            
             
     total_end_time = time.time()
     elapsed_time = total_end_time - total_start_time

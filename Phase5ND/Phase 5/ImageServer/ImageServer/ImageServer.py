@@ -132,12 +132,6 @@ while True: # Continuous loop to read data from the client
             # We know we can move forward as expected sequence number matches the current sequence number
             # Now we will prepare for the next packet sequence number
             print("Seq match and Checksum match!")
-            '''
-            if(expected_seg_num == 0):
-                expected_seg_num = 1
-            else:
-                expected_seg_num = 0
-            '''
             
             
             # Add the packet and sequence number to our imageReconstruct list
@@ -157,6 +151,7 @@ while True: # Continuous loop to read data from the client
             message = message + seq_num_byte
             server_socket.sendto(message, client_address)
             expected_seg_num += 1
+            #expected_seg_num = seq_num + 1
 
 
 # Put together our fixed image
