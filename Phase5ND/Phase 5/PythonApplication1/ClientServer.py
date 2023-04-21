@@ -169,7 +169,8 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
     timer = 0
     start_timer = True
     elapsed_time = 0
-    out_going_packets = []
+    out_going_packets = [None] * len(output_image)
+    #out_going_packets = []
     timer_array = [None] * len(output_image)
     num_of_packets_to_send = len(output_image)
     num_ack = 0
@@ -200,10 +201,10 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
             packet = seq_num.to_bytes(2, "big") + packet
 
             #store each of these packets in an array
-            out_going_packets.append(packet)
+            out_going_packets[seq_num] = packet
 
             #send out the packet
-            Udt_send_packet(out_going_packets[seq_num % window_size])
+            Udt_send_packet(out_going_packets[seq_num])
             print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
@@ -226,7 +227,7 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
-                    del out_going_packets[0]
+                    #del out_going_packets[0]
         #our timeout procedure 
         except:
             
