@@ -23,11 +23,14 @@ def Create_checksum(packet, sequence_number):
     
     return check_sum
 
-
+    # -----Manual corruption for Options 3/5-----
+    # Options 2/4 must be "if percent_check != 0:"
+    # Options 3/5 must be "if percent_check < [9 -> 2 in decrements of 0.5]
+    # 9 = 0% chance
+    # 2 = 70% chance
 def Corrupt_data(data, seq_num):
     percent_check = random.randint(0,9)
-    if percent_check !=0:
-        # Simulate a checksum error 10% of the time
+    if percent_check != 0: # Simulate % of corruption
         return Create_checksum(data, seq_num)
     else:
         # Simulate a bit error in the checksum
@@ -54,21 +57,21 @@ while True:
 packet_num = 0
 expected_seg_num = 0
 input_count = 0
+last_succesful_ack = 0
 
 while True: # Continuous loop to read data from the client
     packet, client_address = server_socket.recvfrom(2048)
     packet_num +=1
     print(f"Waiting on packet {packet_num}...")
-    print(option_one_chose)
 
     if packet == b"end":
         print("Transmisison finished")
         break
     
     # Extract the sequence number and checksum from the packet
-    seq_num = packet[0]
-    checksum = packet[1:3]
-    data = packet[3:]
+    seq_num = int.from_bytes(packet[0:2], byteorder = 'big')
+    checksum = packet[2:4]
+    data = packet[4:]
     
     print("Sent sequence number: ", seq_num)
     print("Expected seq number: ", expected_seg_num)
@@ -87,13 +90,24 @@ while True: # Continuous loop to read data from the client
 
     # Check the checksum with our incoming packet, if there is a mismatch we need to call for the packet to be resent
     # We do not proceed forward until a succesful packet is recieved
-    if(calculated_checksum!= checksum):
+    if(calculated_checksum != checksum):
         print("Checksum from client: ", checksum)
         print("Checksum produced by the server: ", calculated_checksum)
-        print("The packet recieved has a checksum mismatch, requesting a new packet...")
+        print("The packet recieved has a checksum mismatch")
+        #print("The packet recieved has a checksum mismatch, requesting a new packet...")
+        '''
+        #resend last succesful ack
+        message = b"ack"
+        seq_num_str = str(last_succesful_ack)
+        seq_num_byte = seq_num_str.encode()
+        message = message + seq_num_byte
+        server_socket.sendto(message, client_address)
         message = b"nak"
         server_socket.sendto(message, client_address)
-        print("New packet request sent!\n")
+        print("New packet request sent!")
+        print(f"Resending ack: {last_succesful_ack}\n")
+        expected_seg_num = last_succesful_ack
+        '''
     else:
         # If our sequence don't match incoming to expected, after passing the checksum then we know
         # the client is asking for the ack back to move forward.
@@ -102,19 +116,19 @@ while True: # Continuous loop to read data from the client
         # packet and move forward
 
         if(seq_num != expected_seg_num):
-            # Resend ACK
-            print("Sequence numbers do not match, ACK must be resent!\n")
+            # Resend ACK with failed seq number
+            print("Sequence numbers do not match, ACK must be resent!")
             message = b"ack"
+            seq_num_str = str(seq_num)
+            seq_num_byte = seq_num_str.encode()
+            message = message + seq_num_byte
             server_socket.sendto(message, client_address)
         else:
             # We know we can move forward as expected sequence number matches the current sequence number
             # Now we will prepare for the next packet sequence number
             print("Seq match and Checksum match!")
-            if(expected_seg_num == 0):
-                expected_seg_num = 1
-            else:
-                expected_seg_num = 0
-
+            
+            
             # Add the packet and sequence number to our imageReconstruct list
             input_count += 1
             print("Packets added to image: ", input_count)
@@ -124,15 +138,20 @@ while True: # Continuous loop to read data from the client
             print(f"Packet {packet_num} has been received from the client.")
             print("Checksum that came with the packet: ", checksum)
             print("Checksums calculated in server: ", calculated_checksum)
-            print(f"---------------------------------------------------------------------------\n")
-            # Tell the client that we have processed the packet
+            print("-" * 100 + '\n')
+            # Tell the client that we have processed the packet and attach the sequence number with it
             message = b"ack"
+            seq_num_str = str(expected_seg_num)
+            seq_num_byte = seq_num_str.encode()
+            message = message + seq_num_byte
             server_socket.sendto(message, client_address)
+            expected_seg_num += 1
+            #expected_seg_num = seq_num + 1
 
 
 # Put together our fixed image
 print("Now process the packets and construct the new image file.\n")
-with open("received_image.jpg", "wb") as file:
+with open("received1_image.jpg", "wb") as file:
     for packet in image_reconstruct:
         file.write(packet)
 
