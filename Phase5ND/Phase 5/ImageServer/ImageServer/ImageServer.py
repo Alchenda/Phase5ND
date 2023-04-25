@@ -8,6 +8,8 @@ print("The server is ready to receive.\n")
 
 image_reconstruct = []
 
+DEBUG_FLAG = False
+
 def Create_checksum(packet, sequence_number):  
     # Split the bytes into a list of integers
     packet_ints = [int.from_bytes(packet[i:i+2], byteorder='big') for i in range(0, len(packet), 2)]
@@ -72,28 +74,34 @@ while True: # Continuous loop to read data from the client
     seq_num = int.from_bytes(packet[0:2], byteorder = 'big')
     checksum = packet[2:4]
     data = packet[4:]
-    
-    print("Sent sequence number: ", seq_num)
-    print("Expected seq number: ", expected_seg_num)
+
+    if(DEBUG_FLAG):
+        print("Sent sequence number: ", seq_num)
+        print("Expected seq number: ", expected_seg_num)
 
     # Condition to check for when option one is chosen
     if(option_one_chose == True):
-        print(f"Option 1 has been chosen.")
+        if(DEBUG_FLAG):
+            print(f"Option 1 has been chosen.")
         calculated_checksum = Create_checksum(data, seq_num)
-        print(f"calculated_checksum = {calculated_checksum}")
+        if(DEBUG_FLAG):
+            print(f"calculated_checksum = {calculated_checksum}")
     else:
-        print(f"Options 2-5 has been chosen.")
+        if(DEBUG_FLAG):
+            print(f"Options 2-5 has been chosen.")
         calculated_checksum = Corrupt_data(data, seq_num)
-        print(f"calculated_checksum = {calculated_checksum}")
+        if(DEBUG_FLAG):
+            print(f"calculated_checksum = {calculated_checksum}")
     
     checksum = int.from_bytes(checksum, "big")
 
     # Check the checksum with our incoming packet, if there is a mismatch we need to call for the packet to be resent
     # We do not proceed forward until a succesful packet is recieved
     if(calculated_checksum != checksum):
-        print("Checksum from client: ", checksum)
-        print("Checksum produced by the server: ", calculated_checksum)
-        print("The packet recieved has a checksum mismatch")
+        if(DEBUG_FLAG):
+            print("Checksum from client: ", checksum)
+            print("Checksum produced by the server: ", calculated_checksum)
+            print("The packet recieved has a checksum mismatch")
         #print("The packet recieved has a checksum mismatch, requesting a new packet...")
         '''
         #resend last succesful ack
@@ -131,7 +139,10 @@ while True: # Continuous loop to read data from the client
             
             # Add the packet and sequence number to our imageReconstruct list
             input_count += 1
-            print("Packets added to image: ", input_count)
+
+            if(DEBUG_FLAG):
+                print("Packets added to image: ", input_count)
+
             image_reconstruct.append((data))
 
             # Print out the packet and sequence number

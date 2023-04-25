@@ -2,6 +2,7 @@ import socket
 import random
 import time
 
+DEBUG_FLAG = False
 # ************ Function definitions ************
 
 def Make_packet(file_to_read):
@@ -59,7 +60,8 @@ def ACK_corruption(percent_error, server_message):
 
 def ACK_loss(percentage_loss, server_message):
     if random.randint(1, 100) <= int(percentage_loss):
-        print("ACK packet lost!")
+        if(DEBUG_FLAG):
+            print("ACK packet lost!")
         return True
         #return b""
     else:
@@ -69,7 +71,8 @@ def ACK_loss(percentage_loss, server_message):
 def data_loss(percentage_loss, packet_to_send):
     # Determine whether to drop the packet
     if random.random() < int(percentage_loss) / 100:
-        print("Dropping data packet...")
+        if(DEBUG_FLAG):
+            print("Dropping data packet...")
         # Randomly drop a percentage of the data bytes in the packet
         data = packet_to_send[4:] # Extracting only the data bytes
         num_bytes_to_drop = int(len(data) * int(percentage_loss) / 100)
@@ -78,7 +81,8 @@ def data_loss(percentage_loss, packet_to_send):
             end_index = start_index + num_bytes_to_drop
             dropped_data = data[start_index:end_index]
             packet_to_send = packet_to_send[:4] + dropped_data + packet_to_send[3+end_index:]
-            print(f"Data Dropped!")
+            if(DEBUG_FLAG):
+                print(f"Data Dropped!")
     return packet_to_send
 
 # ************ End of Function definitions ************
@@ -164,7 +168,8 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
     count = 0
     seq_num = 0
     TIMEOUT = 0.05
-    print(f"Timeout timer set to {TIMEOUT} ms")
+    if(DEBUG_FLAG):
+        print(f"Timeout timer set to {TIMEOUT} ms")
     total_start_time = time.time()
     base = 0 # Base packet
     timer = 0
@@ -207,7 +212,8 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
 
             # Send out the packet
             Udt_send_packet(out_going_packets[seq_num])
-            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            if(DEBUG_FLAG):
+                print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
         # Start our timer if appropriate
@@ -221,14 +227,17 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
 
             # Change the message from bytes to a string to make operations easier
             str_message = message_from_server.decode()
-            print(f"\nMessage from server {str_message}")
+            if(DEBUG_FLAG):
+                print(f"\nMessage from server {str_message}")
             iso_str_message = str_message[:3] # Isolate the ack or nak
 
             if(iso_str_message == "ack"):
-                print(f"\nServer Acknowledges Packet.")
+                if(DEBUG_FLAG):
+                    print(f"\nServer Acknowledges Packet.")
                 num_ack = int(str_message[3:]) # Get the last number from the ack
-                print(f"This packet is sent and acked, moving the window.")
-                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if(DEBUG_FLAG):
+                    print(f"This packet is sent and acked, moving the window.")
+                    print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
@@ -237,7 +246,8 @@ if(option_choice == "Option 1" or option_choice == "option 1"):
         except:
             
             if time.time() - timer > TIMEOUT:
-                print("**** TIMEOUT ****")
+                if(DEBUG_FLAG):
+                    print("**** TIMEOUT ****")
                 iteration = 0
                 while iteration < len(out_going_packets):
                     Udt_send_packet(out_going_packets[iteration])
@@ -256,7 +266,8 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
     count = 0
     seq_num = 0
     TIMEOUT = 0.05
-    print(f"Timeout timer set to {TIMEOUT} ms")
+    if(DEBUG_FLAG):
+        print(f"Timeout timer set to {TIMEOUT} ms")
     total_start_time = time.time()
     base = 0 # Base packet
     timer = 0
@@ -305,7 +316,8 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
 
             # Send out the packet
             Udt_send_packet(out_going_packets[seq_num % window_size])
-            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            if(DEBUG_FLAG):
+                print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
         # Start our timer if appropriate
@@ -319,15 +331,18 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
 
             # Change the message from bytes to a string to make operations easier
             str_message = message_from_server.decode()
-            print(f"\nMessage from server {str_message}")
+            if(DEBUG_FLAG):
+                print(f"\nMessage from server {str_message}")
             iso_str_message = str_message[:3] # Isolate the ack or nak
 
             # Check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
             if(not ACK_corruption(percent_error, message_from_server) and iso_str_message == "ack"):
-                print(f"\nServer Acknowledges Packet.")
+                if(DEBUG_FLAG):
+                    print(f"\nServer Acknowledges Packet.")
                 num_ack = int(str_message[3:]) # Get the last number from the ack
-                print(f"This packet is sent and acked, moving the window.")
-                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if(DEBUG_FLAG):
+                    print(f"This packet is sent and acked, moving the window.")
+                    print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
@@ -336,7 +351,8 @@ elif(option_choice == "Option 2" or option_choice == "option 2"):
         except:
             
             if time.time() - timer > TIMEOUT:
-                print("**** TIMEOUT ****")
+                if(DEBUG_FLAG):
+                    print("**** TIMEOUT ****")
                 iteration = 0
                 while iteration < len(out_going_packets):
                     Udt_send_packet(out_going_packets[iteration])
@@ -399,7 +415,8 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
 
             # Send out the packet
             Udt_send_packet(out_going_packets[seq_num % window_size])
-            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            if(DEBUG_FLAG):
+                print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
         # Start our timer if appropriate
@@ -413,15 +430,18 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
 
             # Change the message from bytes to a string to make operations easier
             str_message = message_from_server.decode()
-            print(f"\nMessage from server {str_message}")
+            if(DEBUG_FLAG):
+                print(f"\nMessage from server {str_message}")
             iso_str_message = str_message[:3] # Isolate the ack or nak
 
             # Check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
             if(iso_str_message == "ack"):
-                print(f"\nServer Acknowledges Packet.")
+                if(DEBUG_FLAG):
+                    print(f"\nServer Acknowledges Packet.")
                 num_ack = int(str_message[3:]) # Get the last number from the ack
-                print(f"This packet is sent and acked, moving the window.")
-                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if(DEBUG_FLAG):
+                    print(f"This packet is sent and acked, moving the window.")
+                    print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
@@ -430,7 +450,8 @@ elif(option_choice == "Option 3" or option_choice == "option 3"):
         except:
             
             if time.time() - timer > TIMEOUT:
-                print("**** TIMEOUT ****")
+                if(DEBUG_FLAG):
+                    print("**** TIMEOUT ****")
                 iteration = 0
                 while iteration < len(out_going_packets):
                     Udt_send_packet(out_going_packets[iteration])
@@ -448,7 +469,8 @@ elif(option_choice == "Option 4" or option_choice == "option 4"):
     count = 0
     seq_num = 0
     TIMEOUT = 0.05
-    print(f"Timeout timer set to {TIMEOUT} ms")
+    if(DEBUG_FLAG):
+        print(f"Timeout timer set to {TIMEOUT} ms")
     total_start_time = time.time()
     base = 0 # Base packet
     timer = 0
@@ -497,7 +519,8 @@ elif(option_choice == "Option 4" or option_choice == "option 4"):
 
             # Send out the packet
             Udt_send_packet(out_going_packets[seq_num % window_size])
-            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            if(DEBUG_FLAG):
+                print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
         # Start our timer if appropriate
@@ -511,15 +534,18 @@ elif(option_choice == "Option 4" or option_choice == "option 4"):
 
             # Change the message from bytes to a string to make operations easier
             str_message = message_from_server.decode()
-            print(f"\nMessage from server {str_message}")
+            if(DEBUG_FLAG):
+                print(f"\nMessage from server {str_message}")
             iso_str_message = str_message[:3] # Ssolate the ack or nak
 
             # Check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
             if(not ACK_loss(percent_error, message_from_server) and iso_str_message == "ack"):
-                print(f"\nServer Acknowledges Packet.")
+                if(DEBUG_FLAG):
+                    print(f"\nServer Acknowledges Packet.")
                 num_ack = int(str_message[3:]) #get the last number from the ack
-                print(f"This packet is sent and acked, moving the window.")
-                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if(DEBUG_FLAG):
+                    print(f"This packet is sent and acked, moving the window.")
+                    print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
@@ -529,7 +555,8 @@ elif(option_choice == "Option 4" or option_choice == "option 4"):
         except:
             
             if time.time() - timer > TIMEOUT:
-                print("**** TIMEOUT ****")
+                if(DEBUG_FLAG):
+                    print("**** TIMEOUT ****")
                 iteration = 0
                 while iteration < len(out_going_packets):
                     Udt_send_packet(out_going_packets[iteration])
@@ -547,7 +574,8 @@ elif(option_choice == "Option 5" or option_choice == "option 5"):
     count = 0
     seq_num = 0
     TIMEOUT = 0.05
-    print(f"Timeout timer set to {TIMEOUT} ms")
+    if(DEBUG_FLAG):
+        print(f"Timeout timer set to {TIMEOUT} ms")
     total_start_time = time.time()
     base = 0 # Base packet
     timer = 0
@@ -598,7 +626,8 @@ elif(option_choice == "Option 5" or option_choice == "option 5"):
             # Send out the packet with data loss chances
             data_loss_chance = data_loss(percentage_loss, out_going_packets[seq_num % window_size])
             Udt_send_packet(data_loss_chance)
-            print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
+            if(DEBUG_FLAG):
+                print(f"Sending packet {seq_num} from the SEND PACKET CONDTION")
             seq_num += 1
 
         # Start our timer if appropriate
@@ -613,14 +642,17 @@ elif(option_choice == "Option 5" or option_choice == "option 5"):
             # Change the message from bytes to a string to make operations easier
             str_message = message_from_server.decode()
             
-            print(f"\nMessage from server {str_message}")
+            if(DEBUG_FLAG):
+                print(f"\nMessage from server {str_message}")
             iso_str_message = str_message[:3] #isolate the ack or nak
             # Check for corruption, if corruption then we need to timeout. Treat corruption and nak the same
             if(iso_str_message == "ack"):
-                print(f"\nServer Acknowledges Packet.")
+                if(DEBUG_FLAG):
+                    print(f"\nServer Acknowledges Packet.")
                 num_ack = int(str_message[3:]) #get the last number from the ack
-                print(f"This packet is sent and acked, moving the window.")
-                print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
+                if(DEBUG_FLAG):
+                    print(f"This packet is sent and acked, moving the window.")
+                    print(f"Extracted integer: {num_ack}, the base we are expecting: {base}")
                 if num_ack == base:
                     timer = time.time()
                     base = num_ack + 1
@@ -629,7 +661,8 @@ elif(option_choice == "Option 5" or option_choice == "option 5"):
         except:
             
             if time.time() - timer > TIMEOUT:
-                print("**** TIMEOUT ****")
+                if(DEBUG_FLAG):
+                    print("**** TIMEOUT ****")
                 iteration = 0
                 while iteration < len(out_going_packets):
                     Udt_send_packet(out_going_packets[iteration])
